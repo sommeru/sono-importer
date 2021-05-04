@@ -1,0 +1,4 @@
+*.gdt
+import
+.DS_Store
+venv
