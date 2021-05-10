@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 import os
 import datetime
+import time
 
 #set config variables
 debug = True
@@ -80,9 +81,7 @@ def imprintImage(inpath, filename):
     try:
         os.makedirs(outpath)
     except OSError:
-        print ("Creation of the directory %s failed" % outpath)
-    else:
-        print ("Successfully created the directory %s" % outpath)
+        pass
 
     if debug:
         print('Read from GDT file: Surname: ' + surname + ', firstname: ' + firstname + ', DOB: ' + dob + ', PatID: ' + patid)
@@ -100,41 +99,42 @@ def imprintImage(inpath, filename):
     overlayDob.text((666, 52), sono_dob, fill="#adadab", anchor="lb", font=font)
 
     #combine images
- #try:   
-    sonoImage = Image.open(os.path.join(inpath, filename))
-    sonoImage.paste(textoverlayImage, (0, 0), textoverlayImage)
-    sonoImage.save(os.path.join(outpath, patid + '-' + filename),"TIFF")
-    print ('Imprinted ' + os.path.join(outpath, patid + '-' + filename) + ': ' + sono_name + ' ' + sono_dob)
+    try:   
+        sonoImage = Image.open(os.path.join(inpath, filename))
+        sonoImage.paste(textoverlayImage, (0, 0), textoverlayImage)
+        sonoImage.save(os.path.join(outpath, patid + '-' + filename),"TIFF")
+        print ('Imprinted ' + os.path.join(outpath, patid + '-' + filename) + ': ' + sono_name + ' ' + sono_dob)
+    except:
+        print('Error imprinting image file...')
+        return(False)
     
-#except:
-    #print('Error imprinting image file...')
-    #return(False)
-    createIsynetImportFile(os.path.join(outpath, filename), patid)
+    createIsynetImportFile(os.path.join(outpath, patid + '-' + filename), patid)
     return(True)
 
-for subdir, dirs, files in os.walk(path_image_in):
-    for imagefile in files:
-        if (imagefile.endswith('.Tiff') or imagefile.endswith('.tiff')):
-            if imprintImage(str(subdir), imagefile):
+while True:
+    for subdir, dirs, files in os.walk(path_image_in):
+        for imagefile in files:
+            if (imagefile.endswith('.Tiff') or imagefile.endswith('.tiff')):
+                if imprintImage(str(subdir), imagefile):
+                    try:
+                        os.remove(os.path.join(subdir, imagefile))
+                    except OSError as e:
+                        print("Error deleting file: %s : %s" % (imagefile, e.strerror))
+
+                    try:
+                        os.rmdir(subdir)
+                    except OSError as e:
+                        pass
+            elif (imagefile in listOfJunkFiles):
+                print('Identified junk file... Deleting ' + os.path.join(subdir, imagefile))
                 try:
-                    #os.remove(os.path.join(subdir, imagefile))
-                    pass
+                    os.remove(os.path.join(subdir, imagefile))
                 except OSError as e:
                     print("Error deleting file: %s : %s" % (imagefile, e.strerror))
-
+            else:
+                print ('Found antoher strange file, moving to IGNORE dir: ' + subdir + imagefile)
                 try:
-                    os.rmdir(subdir)
+                    os.rename(os.path.join(subdir, imagefile), path_ignore / imagefile)
                 except OSError as e:
-                    pass
-        elif (imagefile in listOfJunkFiles):
-            print('Identified junk file... Deleting ' + os.path.join(subdir, imagefile))
-            try:
-                os.remove(os.path.join(subdir, imagefile))
-            except OSError as e:
-                print("Error deleting file: %s : %s" % (imagefile, e.strerror))
-        else:
-            print ('Found antoher strange file, moving to IGNORE dir: ' + subdir + imagefile)
-            try:
-                os.rename(os.path.join(subdir, imagefile), path_ignore / imagefile)
-            except OSError as e:
-                print("Error moving file: %s : %s" % (imagefile, e.strerror))
+                    print("Error moving file: %s : %s" % (imagefile, e.strerror))
+    time.sleep(5)
