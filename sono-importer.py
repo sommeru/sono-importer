@@ -1,23 +1,30 @@
-#!./venv/bin/python3
+#!.\venv\Scripts\python.exe
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 import os
 import datetime
 import time
+import configparser #for reading the configuration file
+import json #for parsing lists in config file
+
+config = configparser.ConfigParser()
+config.read('gdt-importer.conf')
+config_devices = configparser.ConfigParser()
+config_devices.read('devices.conf')
 
 #set config variables
-debug = True
+debug = bool(config['Main']['debug'])
+device = config['Main']['device']
 
-font = ImageFont.truetype('arial.ttf', 23)
-path_gdt = Path('./in')
-path_image_in = Path('./in/image')
-path_image_out = Path('./out')
-path_ignore = Path('./ignore')
-file_gdt = Path('mcsrparchiv23.gdt')
-filename_isynetImport = 'Archiv23'
-path_isynetImport = Path('./out')
-listOfJunkFiles = ["$RECYCLE.BIN", ".AppleDouble",'.com.apple.timemachine.donotpresent', '.com.apple.timemachine.supported', '.DocumentRevisions-V100', '.dropbox.cache', '.dropbox', '.DS_Store', '.fseventsd', '.LSOverride', '.Spotlight-V100', '.TemporaryItems', '.Trashes', 'Desktop.ini', 'ehthumbs.db', 'Thumbs.db']
-
+font = ImageFont.truetype(config_devices[device]['font'], int(config_devices[device]['font_size']))
+path_gdt = Path(config_devices[device]['path_gdt'])
+path_image_in = Path(config_devices[device]['path_image_in'])
+path_image_out = Path(config_devices[device]['path_image_out'])
+path_ignore = Path(config_devices[device]['path_ignore'])
+file_gdt = Path(config_devices[device]['file_gdt'])
+filename_isynetImport = config_devices[device]['filename_isynetImport']
+path_isynetImport = Path(config_devices[device]['path_isynetImport'])
+listOfJunkFiles = config_devices[device]["listOfJunkFiles"].replace(" ", "").split(',')
 
 
 def createIsynetImportFile(imagefile, patid):
@@ -94,9 +101,9 @@ def imprintImage(inpath, filename):
     #create text overlay
     textoverlayImage = Image.new("RGBA", (1232, 924))
     overlayName = ImageDraw.Draw(textoverlayImage)
-    overlayName.text((393, 27), sono_name, fill="#adadab", anchor="lb", font=font)
+    overlayName.text((int(config_devices[device]['name_x']), int(config_devices[device]['name_y'])), sono_name, fill='#' + config_devices[device]['font_color'], anchor="lb", font=font)
     overlayDob = ImageDraw.Draw(textoverlayImage)
-    overlayDob.text((666, 52), sono_dob, fill="#adadab", anchor="lb", font=font)
+    overlayDob.text((int(config_devices[device]['dob_x']), int(config_devices[device]['dob_y'])), sono_dob, fill='#' + config_devices[device]['font_color'], anchor="lb", font=font)
 
     #combine images
     try:   
@@ -114,17 +121,18 @@ def imprintImage(inpath, filename):
 while True:
     for subdir, dirs, files in os.walk(path_image_in):
         for imagefile in files:
-            if (imagefile.endswith('.Tiff') or imagefile.endswith('.tiff')):
+            if (imagefile.endswith('.Tiff') or imagefile.endswith('.tiff') or imagefile.endswith('.jpg')):
                 if imprintImage(str(subdir), imagefile):
                     try:
                         os.remove(os.path.join(subdir, imagefile))
                     except OSError as e:
                         print("Error deleting file: %s : %s" % (imagefile, e.strerror))
 
-                    try:
-                        os.rmdir(subdir)
-                    except OSError as e:
-                        pass
+                    if (Path(subdir) != path_image_in):
+                        try:
+                            os.rmdir(subdir)
+                        except OSError as e:
+                            pass
             elif (imagefile in listOfJunkFiles):
                 print('Identified junk file... Deleting ' + os.path.join(subdir, imagefile))
                 try:
@@ -132,7 +140,7 @@ while True:
                 except OSError as e:
                     print("Error deleting file: %s : %s" % (imagefile, e.strerror))
             else:
-                print ('Found antoher strange file, moving to IGNORE dir: ' + subdir + imagefile)
+                print ('Found anoher strange file, moving to IGNORE dir: ' + subdir + imagefile)
                 try:
                     os.rename(os.path.join(subdir, imagefile), path_ignore / imagefile)
                 except OSError as e:
