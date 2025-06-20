@@ -1,6 +1,6 @@
-*.gdt
 import
 .DS_Store
 venv
 build
 dist
+*.pdf

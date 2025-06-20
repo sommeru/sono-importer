@@ -9,8 +9,6 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 pillow = "^11.2.1"
-py2app = "^0.28.8"
-
 
 [build-system]
 requires = ["poetry-core"]
