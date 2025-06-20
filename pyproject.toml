@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "sono-importer"
+version = "0.1.0"
+description = "A tool for imprinting ultrasound images with patient data"
+authors = ["Ulrich Sommer <mail@ulrich-sommer.de>"]
+license = "GNU"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pillow = "^11.2.1"
+py2app = "^0.28.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

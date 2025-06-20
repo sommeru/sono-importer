@@ -1,79 +1,66 @@
 #!.\venv\Scripts\python.exe
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pathlib import Path
 import os
 import datetime
 import time
 import configparser #for reading the configuration file
 import json #for parsing lists in config file
+from pathlib import Path
+base_dir = Path(__file__).parent
 
 config = configparser.ConfigParser()
-config.read('gdt-importer.conf')
+config.read(base_dir / 'gdt-importer.conf')
+#config.read('gdt-importer.conf')
 config_devices = configparser.ConfigParser()
-config_devices.read('devices.conf')
+
+#config_devices.read('devices.conf')
+config_devices.read(base_dir / 'devices.conf')
 
 #set config variables
 debug = bool(config['Main']['debug'])
 device = config['Main']['device']
 
-font = ImageFont.truetype(config_devices[device]['font'], int(config_devices[device]['font_size']))
-path_gdt = Path(config_devices[device]['path_gdt'])
-path_image_in = Path(config_devices[device]['path_image_in'])
-path_image_out = Path(config_devices[device]['path_image_out'])
-path_ignore = Path(config_devices[device]['path_ignore'])
-file_gdt = Path(config_devices[device]['file_gdt'])
-filename_isynetImport = config_devices[device]['filename_isynetImport']
-path_isynetImport = Path(config_devices[device]['path_isynetImport'])
-listOfJunkFiles = config_devices[device]["listOfJunkFiles"].replace(" ", "").split(',')
-
-
-def createIsynetImportFile(imagefile, patid):
-    dateOfExam = datetime.date.today().strftime("%d.%m.%y")
-    archivenumber = 0
-    archiveExists = True
-    while archiveExists:
-        archivenumber = archivenumber + 1
-        try:
-           isynetimportfilehandler = open(os.path.join(path_isynetImport, filename_isynetImport + '.' + str(archivenumber).zfill(3)), 'x', encoding='windows-1252')
-           archiveExists = False
-        except (FileExistsError):
-            archiveExists = True
-    if debug:
-        print('Writing to archive file: ' + os.path.join(path_isynetImport, filename_isynetImport + '.' + str(archivenumber).zfill(3)))
-    try:
-        isynetimportfilehandler.write('01380006100\n') # unknown purpose
-        isynetimportfilehandler.write('014810000138\n') # unknown purpose
-        isynetimportfilehandler.write('0176200' + dateOfExam + '\n') #Date of exam DD.MM.YY
-        isynetimportfilehandler.write('0143600' + patid + '\n') # PatID
-        isynetimportfilehandler.write('0136228SONO\n') # must be "SONO" for importing reasons
-        isynetimportfilehandler.write('0676230' + imagefile) # filename of archived image file
-        isynetimportfilehandler.close()
-    except OSError as e:
-        print("Error writing to Archive file: %s : %s" % (archivenumber, e.strerror))
+font = ImageFont.truetype(base_dir / config_devices[device]['font'], int(config_devices[device]['font_size']))
+path_gdt = Path(config_devices['Main']['path_gdt'])
+path_image_in = Path(config_devices['Main']['path_image_in'])
+path_image_out = Path(config_devices['Main']['path_image_out'])
+path_ignore = Path(config_devices['Main']['path_ignore'])
+file_gdt = Path(config_devices['Main']['file_gdt'])
+listOfJunkFiles = config_devices['Main']["listOfJunkFiles"].replace(" ", "").split(',')
 
 def parseGDT():
-        #parse GDT file
+    # Default values (placeholders)
+    surname = 'Doe'
+    firstname = 'John'
+    dob = '01012000'
+    patid = '000000'
+
     try:
-        gdtfile = open(path_gdt / file_gdt, 'r', encoding='windows-1252')
-        for line in gdtfile:            
-            line = line.strip()
-            if line.find('3101') == 3:
-                surname = line[7:]
-            elif line.find('3102') == 3:
-                firstname = line[7:]
-            elif line.find('3103') == 3:
-                dob = line[7:]
-            elif line.find('3000') == 3:
-                patid = line[7:]
+        gdt_path = path_gdt / file_gdt
+        if not gdt_path.exists():
+            if debug:
+                print(f"GDT file not found: {gdt_path}. Using placeholder values.")
+            return [surname, firstname, dob, patid]
 
-    except OSError as e:
-        print (e + 'error reading GDT file, using standard values...')
-        surname = 'Doe'
-        firstname = 'John'
-        dob = '01012000'
-        patid = '000000'
+        with open(gdt_path, 'r', encoding='windows-1252') as gdtfile:
+            for line in gdtfile:
+                line = line.strip()
+                if line.find('3101') == 3:
+                    surname = line[7:]
+                elif line.find('3102') == 3:
+                    firstname = line[7:]
+                elif line.find('3103') == 3:
+                    dob = line[7:]
+                elif line.find('3000') == 3:
+                    patid = line[7:]
+            if debug:
+                print('Read from GDT file: Surname: ' + surname + ', firstname: ' + firstname + ', DOB: ' + dob + ', PatID: ' + patid)
 
-    return([surname, firstname, dob, patid])
+    except Exception as e:
+        print(f"Error reading GDT file: {e}. Using placeholder values.")
+
+    return [surname, firstname, dob, patid]
 
 
 def imprintImage(inpath, filename):
@@ -89,34 +76,88 @@ def imprintImage(inpath, filename):
         os.makedirs(outpath)
     except OSError:
         pass
-
-    if debug:
-        print('Read from GDT file: Surname: ' + surname + ', firstname: ' + firstname + ', DOB: ' + dob + ', PatID: ' + patid)
-        
-    # format strings according to Samsung naming convertion
+           
+    # format strings according to naming convention
     sono_name = (surname + ', ' + firstname)
     sono_dob = dob[:2] + '-' + dob[2:]
     sono_dob = sono_dob[:5] + '-' + sono_dob[5:]
 
-    #create text overlay
-    textoverlayImage = Image.new("RGBA", (1232, 924))
+    #create text overlay    
+    textoverlayImage = Image.new("RGBA", (int(config_devices[device]['size_x']), int(config_devices[device]['size_y'])), (0, 0, 0, 0))
     overlayName = ImageDraw.Draw(textoverlayImage)
     overlayName.text((int(config_devices[device]['name_x']), int(config_devices[device]['name_y'])), sono_name, fill='#' + config_devices[device]['font_color'], anchor="lb", font=font)
     overlayDob = ImageDraw.Draw(textoverlayImage)
     overlayDob.text((int(config_devices[device]['dob_x']), int(config_devices[device]['dob_y'])), sono_dob, fill='#' + config_devices[device]['font_color'], anchor="lb", font=font)
 
-    #combine images
+    #combine images and save as PDF
     try:   
-        sonoImage = Image.open(os.path.join(inpath, filename))
-        sonoImage.paste(textoverlayImage, (0, 0), textoverlayImage)
-        sonoImage.save(os.path.join(outpath, patid + '-' + filename),"TIFF")
-        print ('Imprinted ' + os.path.join(outpath, patid + '-' + filename) + ': ' + sono_name + ' ' + sono_dob)
-    except:
-        print('Error imprinting image file...')
-        return(False)
-    
-    createIsynetImportFile(os.path.join(outpath, patid + '-' + filename), patid)
-    return(True)
+        sonoImage = Image.open(os.path.join(inpath, filename)).convert("RGBA")
+        combined = Image.alpha_composite(sonoImage, textoverlayImage)
+
+        # PDF requires RGB mode
+        combined_rgb = combined.convert("RGB")
+
+        pdf_filename = os.path.join(outpath, f"{patid}-{surname}_{firstname}.pdf")
+        combined_rgb.save(pdf_filename, "PDF", resolution=100.0)
+
+        print ('Created PDF: ' + pdf_filename + ': ' + sono_name + ' ' + sono_dob)
+
+        #Delete GDT after successful imprint
+        try:
+            #os.remove(path_gdt / file_gdt)
+            if debug:
+                print(f"GDT-File deleted: {path_gdt / file_gdt}")
+        except Exception as e:
+            print(f"Error deleting GDT file: {e}")
+
+    except Exception as e:
+        print('Error creating PDF file:', e)
+        return False
+        
+    return True
+
+def delete_image_and_parent_folders(path, stop_at):
+    """
+    Recursively deletes empty directories up to (but not including) 'stop_at'.
+
+    Parameters:
+        path (str or Path): The starting folder path (usually where the image was).
+        stop_at (str or Path): The root directory beyond which deletion should not proceed.
+    """
+    try:
+        path = Path(path).resolve()
+        stop_at = Path(stop_at).resolve()
+
+        if not path.is_dir():
+            if debug:
+                print(f"Not a directory: {path}")
+            return
+
+        if not str(path).startswith(str(stop_at)):
+            print(f"Safety check failed: {path} is not under {stop_at}. Aborting folder deletion.")
+            return
+
+        while path != stop_at and path != path.parent:
+            try:
+                path.rmdir()
+                if debug:
+                    print(f"Deleted empty folder: {path}")
+                path = path.parent
+            except OSError as e:
+                if debug:
+                    print(f"Stopping cleanup. Folder not empty or locked: {path} — {e.strerror}")
+                break
+            except Exception as e:
+                print(f"Unexpected error deleting folder {path}: {e}")
+                break
+
+    except Exception as e:
+        print(f"Critical error in delete_empty_parents(): {e}")
+
+
+print ('Hello from the happy sono-importer daemon...')
+print ('Running in ' + device + ' Mode.')
+print ('Waiting for image file to appear in import dir.')
 
 while True:
     for subdir, dirs, files in os.walk(path_image_in):
@@ -128,11 +169,8 @@ while True:
                     except OSError as e:
                         print("Error deleting file: %s : %s" % (imagefile, e.strerror))
 
-                    if (Path(subdir) != path_image_in):
-                        try:
-                            os.rmdir(subdir)
-                        except OSError as e:
-                            pass
+                    delete_image_and_parent_folders(subdir, path_image_in)
+
             elif (imagefile in listOfJunkFiles):
                 print('Identified junk file... Deleting ' + os.path.join(subdir, imagefile))
                 try:
