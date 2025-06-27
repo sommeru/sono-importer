@@ -18,7 +18,7 @@ config_devices = configparser.ConfigParser()
 config_devices.read(base_dir / 'devices.conf')
 
 #set config variables
-debug = bool(config['Main']['debug'])
+debug = config.getboolean('Main', 'debug')
 device = config['Main']['device']
 
 font = ImageFont.truetype(base_dir / config_devices[device]['font'], int(config_devices[device]['font_size']))
